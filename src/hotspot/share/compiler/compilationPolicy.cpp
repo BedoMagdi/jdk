@@ -793,7 +793,13 @@ void CompilationPolicy::compile(const methodHandle& mh, int bci, CompLevel level
     }
     int hot_count = (bci == InvocationEntryBci) ? mh->invocation_count() : mh->backedge_count();
     update_rate(nanos_to_millis(os::javaTimeNanos()), mh());
-    CompileBroker::compile_method(mh, bci, level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    intx assigned_level;
+    bool check_level = CompilerOracle::has_option_value(mh, CompileCommand::CompileAtLevel, assigned_level);
+    if(check_level){
+      CompileBroker::compile_method(mh, bci, assigned_level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    }else{
+      CompileBroker::compile_method(mh, bci, level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    }
   }
 }
 

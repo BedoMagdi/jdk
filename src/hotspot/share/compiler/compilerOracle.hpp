@@ -71,6 +71,7 @@ class methodHandle;
   option(DumpReplay,     "DumpReplay", Bool) \
   option(DumpInline,     "DumpInline", Bool) \
   option(CompileThresholdScaling, "CompileThresholdScaling", Double) \
+  option(CompileAtLevel, "CompileAtLevel", Intx) \
   option(ControlIntrinsic,  "ControlIntrinsic",  Ccstrlist) \
   option(DisableIntrinsic,  "DisableIntrinsic",  Ccstrlist) \
   option(NoRTMLockEliding,  "NoRTMLockEliding",  Bool) \
