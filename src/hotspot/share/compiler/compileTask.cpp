@@ -332,7 +332,6 @@ void CompileTask::log_task(xmlStream* log) {
   Thread* thread = Thread::current();
   methodHandle method(thread, this->method());
   ResourceMark rm(thread);
-
   // <task id='9' method='M' osr_bci='X' level='1' blocking='1' stamp='1.234'>
   log->print(" compile_id='%d'", _compile_id);
   if (_osr_bci != CompileBroker::standard_entry_bci) {

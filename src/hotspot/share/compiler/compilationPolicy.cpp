@@ -40,6 +40,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/safepointVerifiers.hpp"
+#include <string.h>
 
 #if INCLUDE_JVMCI
 #include "jvmci/jvmci.hpp"
@@ -81,6 +82,7 @@ bool CompilationPolicy::must_be_compiled(const methodHandle& m, int comp_level) 
   if (m->has_compiled_code()) return false;       // already compiled
   if (!can_be_compiled(m, comp_level)) return false;
 
+
   return !UseInterpreter ||                                              // must compile all methods
          (UseCompiler && AlwaysCompileLoopMethods && m->has_loops() && CompileBroker::should_compile_new_jobs()); // eagerly compile loop methods
 }
@@ -103,7 +105,8 @@ void CompilationPolicy::compile_if_required(const methodHandle& m, TRAPS) {
       // even before classes are initialized.
       return;
     }
-    CompLevel level = initial_compile_level(m);
+
+    CompLevel level = initial_compile_level(m);;
     if (PrintTieredEvents) {
       print_event(COMPILE, m(), m(), InvocationEntryBci, level);
     }
@@ -591,6 +594,7 @@ CompLevel CompilationPolicy::initial_compile_level(const methodHandle& method) {
       level = CompLevel_full_optimization;
     }
   }
+
   assert(level != CompLevel_any, "Unhandled compilation mode");
   return limit_level(level);
 }
@@ -744,6 +748,7 @@ nmethod* CompilationPolicy::event(const methodHandle& method, const methodHandle
 void CompilationPolicy::compile(const methodHandle& mh, int bci, CompLevel level, TRAPS) {
   assert(verify_level(level), "Invalid compilation level requested: %d", level);
 
+  //tty->print("%s\n", mh->name_and_sig_as_C_string());
   if (level == CompLevel_none) {
     if (mh->has_compiled_code()) {
       // Happens when we switch to interpreter to profile.
@@ -791,15 +796,34 @@ void CompilationPolicy::compile(const methodHandle& mh, int bci, CompLevel level
     if (PrintTieredEvents) {
       print_event(COMPILE, mh(), mh(), bci, level);
     }
+    // char name[] = "java.math.MutableBigInteger.divideKnuth(Ljava/math/MutableBigInteger;Ljava/math/MutableBigInteger;)Ljava/math/MutableBigInteger;";
+    // char* other_name = mh->name_and_sig_as_C_string();
+    // if(strcmp(name, other_name) == 0){
+    //   tty->print("OG level %d", (int) level);
+    // }
+
+
     int hot_count = (bci == InvocationEntryBci) ? mh->invocation_count() : mh->backedge_count();
     update_rate(nanos_to_millis(os::javaTimeNanos()), mh());
-    intx assigned_level;
-    bool check_level = CompilerOracle::has_option_value(mh, CompileCommand::CompileAtLevel, assigned_level);
-    if(check_level){
-      CompileBroker::compile_method(mh, bci, assigned_level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
-    }else{
-      CompileBroker::compile_method(mh, bci, level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
-    }
+    // intx assigned_level;
+    // bool check_level = CompilerOracle::has_option_value(mh, CompileCommand::CompileAtLevel, assigned_level);
+    // if(check_level){
+    //   if(strcmp(name, other_name) == 0){
+    //     tty->print("level %d", (int) assigned_level);
+    //   }
+    //   if(assigned_level == (intx) 1){
+    //     CompileBroker::compile_method(mh, bci, CompLevel_simple, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    //   }else if(assigned_level == (intx) 4){
+    //     CompileBroker::compile_method(mh, bci, CompLevel_full_optimization, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    //   }else if(assigned_level == (intx) 3){
+    //     CompileBroker::compile_method(mh, bci, CompLevel_full_profile, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    //   }else if(assigned_level == (intx) 2){
+    //     CompileBroker::compile_method(mh, bci, CompLevel_limited_profile, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    //   }
+      
+    // }else{
+    CompileBroker::compile_method(mh, bci, level, mh, hot_count, CompileTask::Reason_Tiered, THREAD);
+    //}
   }
 }
 
@@ -911,6 +935,15 @@ bool CompilationPolicy::should_create_mdo(const methodHandle& method, CompLevel 
   if (cur_level != CompLevel_none || force_comp_at_level_simple(method) || CompilationModeFlag::quick_only() || !ProfileInterpreter) {
     return false;
   }
+
+  intx assigned_level;
+  bool check_level = CompilerOracle::has_option_value(method, CompileCommand::CompileAtLevel, assigned_level);
+  if(check_level){
+    if(assigned_level == 1){
+      return false;
+    }
+  }
+
   int i = method->invocation_count();
   int b = method->backedge_count();
   double k = Tier0ProfilingStartPercentage / 100.0;
@@ -1003,6 +1036,23 @@ CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_le
   CompLevel next_level = cur_level;
   int i = method->invocation_count();
   int b = method->backedge_count();
+
+  intx assigned_level;
+  bool check_level = CompilerOracle::has_option_value(method, CompileCommand::CompileAtLevel, assigned_level);
+  if(check_level){
+    if(assigned_level == (intx) 1){
+      return CompLevel_simple;
+    }else if(assigned_level == (intx) 4){
+      return CompLevel_full_optimization;
+    }else if(assigned_level == (intx) 2){
+      return CompLevel_limited_profile;
+    }
+  }
+
+  if(CompileAtLevel){
+    return CompLevel_simple;
+  }
+
 
   if (force_comp_at_level_simple(method)) {
     next_level = CompLevel_simple;

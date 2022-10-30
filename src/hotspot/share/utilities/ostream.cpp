@@ -39,9 +39,13 @@
 #include "utilities/vmError.hpp"
 #include "utilities/xmlstream.hpp"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 // Declarations of jvm methods
 extern "C" void jio_print(const char* s, size_t len);
 extern "C" int jio_printf(const char *fmt, ...);
+
 
 outputStream::outputStream(int width) {
   _width       = width;
@@ -222,7 +226,7 @@ void outputStream::stamp() {
   // outputStream::stamp() may get called by ostream_abort(), use snprintf
   // to avoid allocating large stack buffer in print().
   char buf[40];
-  jio_snprintf(buf, sizeof(buf), "%.3f", _stamp.seconds());
+  jio_snprintf(buf, sizeof(buf), "%.6f", _stamp.seconds());
   print_raw(buf);
 }
 
@@ -764,6 +768,44 @@ void defaultStream::start_log() {
     xs->_text = this;  // requires friend declaration!
 }
 
+typedef struct node{
+    char* value; 
+    struct node *next;
+}node;
+
+
+node *createNode(char *s) {
+    node *newNode = (node *)malloc(sizeof(node));
+    newNode->value = s;
+    newNode->next = NULL;
+    return newNode;
+}
+
+char * h_str = (char*)"head";
+node * head = createNode(h_str);
+
+//add to the beginning
+void push(node ** head, node *newNode) {
+    newNode->next = *head;
+    *head = newNode;
+}
+
+
+
+static void print_nmethod(nmethod* nm) {
+  Method* method = (nm == NULL) ? NULL : nm->method();
+  if ((method != NULL) && nm->is_alive()) {
+    const char* name = method->name_and_sig_as_C_string();
+    int count = method->invocation_count();
+    int backedgeCount = method->backedge_count();
+    int size = strlen(name) + 120; //size will need to be changed if we write more in the line!
+    char* line = (char *) malloc(size * sizeof(char));
+    snprintf(line, size, "name: %s, count = %d, backedge count = %d", name, count, backedgeCount);
+    node * new_line = createNode(line);
+    push(&head, new_line);
+  }
+}
+
 // finish_log() is called during normal VM shutdown. finish_log_on_error() is
 // called by ostream_abort() after a fatal error.
 //
@@ -777,6 +819,24 @@ void defaultStream::finish_log() {
   xs->done("hotspot_log");
   xs->flush();
 
+  //added this part to print to file
+  CodeCache::nmethods_do(print_nmethod);
+  const char* method_count_log_name = LogFile != NULL ? LogFile : "hotspot.log";
+  int size = strlen(method_count_log_name) + 30;
+  char* count_file_name = (char *) malloc(size * sizeof(char));
+  snprintf(count_file_name, size, "%s_method_counts.txt", method_count_log_name);
+  fileStream* count_file = open_file(count_file_name);
+  node * current = head;
+  while (current != NULL) {
+     if (strcmp(current->value, "head") != 0){
+      count_file->print("%s\n", current->value);
+     }
+    current = current->next;
+  }
+  count_file->flush();
+  delete count_file;
+  //******
+
   fileStream* file = _log_file;
   _log_file = NULL;
 
@@ -786,6 +846,8 @@ void defaultStream::finish_log() {
   file->flush();
   delete file;
 }
+
+
 
 void defaultStream::finish_log_on_error(char *buf, int buflen) {
   xmlStream* xs = _outer_xmlStream;
